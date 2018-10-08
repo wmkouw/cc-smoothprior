@@ -1,4 +1,4 @@
-# Learning informative priors for hidden Potts-Markov Random Fields
+# Informed priors for hidden Potts-MRFs
 
 In this project, I aim to learn an informative prior for a Bayesian image
 segmentation model with a Potts-Markov Random Field as a prior for the labels.
