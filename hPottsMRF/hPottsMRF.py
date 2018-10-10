@@ -19,22 +19,31 @@ import scipy.optimize as opt
 class hiddenPottsMarkovRandomField(object):
     """Hidden Potts-Markov Random Field."""
 
-    def __init__(self, num_classes=2):
+    def __init__(self, neighbourhood_size=(3, 3), num_iter=5):
         """
         Initialize variables for an instance of a hidden Potts-MRF.
 
         Parameters
         ----------
-        num_classes : int
-            Number of components in the mixture model.
+        neighbourhood_size : (int, int)
+            Size of the neighbourhood on which the variational approximation
+            depends (def: (1, 1))
+        num_iter : int
+            Number of iterations to run VB-EM.
 
         Returns
         -------
         None
 
         """
-        # Store initalized variables
-        self.num_classes = num_classes
+        # Store model parameters
+        if np.all(neighbourhood_size >= (3, 3)):
+            self.neighbourhood_size = neighbourhood_size
+        else:
+            raise ValueError('Neighbourhood size is too small')
+
+        # Optimization parameters
+        self.num_iter = num_iter
 
     def Hamiltonian(self, z):
         r"""
@@ -289,7 +298,7 @@ class hiddenPottsMarkovRandomField(object):
 
         return B
 
-    def neighbourhood(self, A, index):
+    def neighbourhood(self, A, index, patch=True):
         """
         Extract a neighbourhood of pixels around current pixel.
 
@@ -299,6 +308,8 @@ class hiddenPottsMarkovRandomField(object):
             Array from which to extract the pixel's neighbourhood.
         index : (int, int)
             Row and column index of current pixel.
+        patch : bool
+            Whether to pair only with direct upper, lower and side pixels.
 
         Returns
         -------
@@ -308,71 +319,90 @@ class hiddenPottsMarkovRandomField(object):
         # Shape of array
         H, W = A.shape
 
-        # Initialize neighbourhood list
-        delta_i = []
+        if not patch:
 
-        # Check for current pixel at top-left boundary
-        if np.all(index == (0, 0)):
+            # Initialize neighbourhood list
+            delta_i = []
 
-            delta_i.append(A[0, 1])
-            delta_i.append(A[1, 0])
+            # Check for current pixel at top-left boundary
+            if np.all(index == (0, 0)):
 
-        # Check for current pixel at top boundary
-        elif (index[0] == 0) and (index[1] != 0 and index[1] != W-1):
+                delta_i.append(A[0, 1])
+                delta_i.append(A[1, 0])
 
-            delta_i.append(A[0, index[1]-1])
-            delta_i.append(A[0, index[1]+1])
-            delta_i.append(A[1, index[1]])
+            # Check for current pixel at top boundary
+            elif (index[0] == 0) and (index[1] != 0 and index[1] != W-1):
 
-        # Check for current pixel at top-right boundary
-        elif np.all(index == (0, W-1)):
+                delta_i.append(A[0, index[1]-1])
+                delta_i.append(A[0, index[1]+1])
+                delta_i.append(A[1, index[1]])
 
-            delta_i.append(A[0, W-2])
-            delta_i.append(A[1, W-1])
+            # Check for current pixel at top-right boundary
+            elif np.all(index == (0, W-1)):
 
-        # Check for current pixel at right boundary
-        elif (index[0] != 0 and index[0] != H-1) and (index[1] == H-1):
+                delta_i.append(A[0, W-2])
+                delta_i.append(A[1, W-1])
 
-            delta_i.append(A[index[0]-1, H-1])
-            delta_i.append(A[index[0]+1, H-1])
-            delta_i.append(A[index[0], H-2])
+            # Check for current pixel at right boundary
+            elif (index[0] != 0 and index[0] != H-1) and (index[1] == H-1):
 
-        # Check for current pixel at bottom-right boundary
-        elif np.all(index == (H-1, W-1)):
+                delta_i.append(A[index[0]-1, H-1])
+                delta_i.append(A[index[0]+1, H-1])
+                delta_i.append(A[index[0], H-2])
 
-            delta_i.append(A[H-2, W-1])
-            delta_i.append(A[H-1, W-2])
+            # Check for current pixel at bottom-right boundary
+            elif np.all(index == (H-1, W-1)):
 
-        # Check for current pixel at bottom boundary
-        elif (index[0] == H-1) and (index[1] != 0 and index[1] != W-1):
+                delta_i.append(A[H-2, W-1])
+                delta_i.append(A[H-1, W-2])
 
-            delta_i.append(A[H-1, index[1]-1])
-            delta_i.append(A[H-1, index[1]+1])
-            delta_i.append(A[H-2, index[1]])
+            # Check for current pixel at bottom boundary
+            elif (index[0] == H-1) and (index[1] != 0 and index[1] != W-1):
 
-        # Check for current pixel at bottom-left boundary
-        elif np.all(index == (H-1, 0)):
+                delta_i.append(A[H-1, index[1]-1])
+                delta_i.append(A[H-1, index[1]+1])
+                delta_i.append(A[H-2, index[1]])
 
-            delta_i.append(A[H-1, 1])
-            delta_i.append(A[H-2, 0])
+            # Check for current pixel at bottom-left boundary
+            elif np.all(index == (H-1, 0)):
 
-        # Check for current pixel at left boundary
-        elif (index[0] != 0 and index[0] != H-1) and (index[1] == 0):
+                delta_i.append(A[H-1, 1])
+                delta_i.append(A[H-2, 0])
 
-            delta_i.append(A[index[0]-1, 0])
-            delta_i.append(A[index[0]+1, 0])
-            delta_i.append(A[index[0], 1])
+            # Check for current pixel at left boundary
+            elif (index[0] != 0 and index[0] != H-1) and (index[1] == 0):
+
+                delta_i.append(A[index[0]-1, 0])
+                delta_i.append(A[index[0]+1, 0])
+                delta_i.append(A[index[0], 1])
+
+            else:
+
+                delta_i.append(A[index[0]-1, index[1]])
+                delta_i.append(A[index[0], index[1]-1])
+                delta_i.append(A[index[0], index[1]+1])
+                delta_i.append(A[index[0]+1, index[1]])
+
+            # Return list, formatted to array
+            return np.array(delta_i)
 
         else:
 
-            delta_i.append(A[index[0]-1, index[1]])
-            delta_i.append(A[index[0], index[1]-1])
-            delta_i.append(A[index[0], index[1]+1])
-            delta_i.append(A[index[0]+1, index[1]])
+            # Patch step size
+            vstep = int((self.neighbourhood_size[0] - 1) / 2)
+            hstep = int((self.neighbourhood_size[1] - 1) / 2)
 
-        return np.array(delta_i)
+            # Pad image to allow slicing at the edges
+            A = np.pad(A, [vstep, hstep], mode='constant', constant_values=0)
 
-    def expectation_step(self, y, nu, theta, beta):
+            # Define slices
+            vslice = slice(index[0]-vstep+vstep, index[0]+vstep+1+vstep)
+            hslice = slice(index[1]-hstep+hstep, index[1]+hstep+1+hstep)
+
+            # Initialize neighbourhood list
+            return A[vslice, hslice]
+
+    def expectation_step(self, y, nu, theta, beta, neighbourhood_size=(1, 1)):
         """
         Perform expectation step from variational-Bayes-EM.
 
@@ -386,6 +416,8 @@ class hiddenPottsMarkovRandomField(object):
             Parameters of variational posterior of Potts model.
         beta : float
             Smoothing parameter.
+        neighbourhood_size : (int, int)
+            Size of the neighbourhood for mean-field.
 
         Returns
         -------
@@ -471,7 +503,7 @@ class hiddenPottsMarkovRandomField(object):
 
         return mu, la, ga, ks
 
-    def variational_expectation_maximization(self, y, K, beta, max_iter=5):
+    def expectation_maximization(self, y, K, beta):
         """
         Perform variational Bayes Expectation-Maximization.
 
@@ -483,8 +515,6 @@ class hiddenPottsMarkovRandomField(object):
             Number of classes to segment image into.
         beta : float
             Smoothing parameter / granularity coefficient of Potts model.
-        max_iter : int
-            Number of iterations to run.
 
         Returns
         -------
@@ -508,10 +538,10 @@ class hiddenPottsMarkovRandomField(object):
         # Initialize variational parameters array
         nu = rnd.randn(H, W, K)
 
-        for r in range(max_iter):
+        for r in range(self.num_iter):
 
             # Report progress
-            print('At iteration ' + str(r+1) + '/' + str(max_iter))
+            print('At iteration ' + str(r+1) + '/' + str(self.num_iter))
 
             # Expectation step
             nu = self.expectation_step(y, nu, theta, beta)
@@ -550,14 +580,10 @@ class hiddenPottsMarkovRandomField(object):
             beta = self.maximum_likelihood_beta(Q, verbose=True)
 
         # Perform VB-EM for segmenting the image
-        nu, theta = self.variational_expectation_maximization(y, K, beta, max_iter=10)
-
-        # Take maximum probability over classes
-        z = nu
-        # z = np.argmax(nu, axis=2)
+        nu, theta = self.expectation_maximization(y, K, beta)
 
         # Return segmented image
         if output_params:
-            return z, theta
+            return nu, theta
         else:
-            return z
+            return nu

@@ -26,13 +26,13 @@ L += L + 1
 L = np.pad(L, [8, 8], mode='constant', constant_values=0)
 
 # Generate observation matrix from label image
-R = rnd.randn(*L.shape)*.1 + 1
+R = rnd.randn(*L.shape)*.3 + 3
 
 # Observed image
 Y = L + R
 
 # Call instance of hPottsMRF
-model = hiddenPottsMarkovRandomField()
+model = hiddenPottsMarkovRandomField(neighbourhood_size=(3, 3))
 
 # Segment observed image
 nu, theta = model.segment(Y, K=3, Q=L, output_params=True)
@@ -41,7 +41,7 @@ print(theta)
 Z = np.argmax(nu, axis=2)
 
 # Plot segmentation
-fg, ax = plt.subplots(nrows=2, ncols=3, figsize=(12,6))
+fg, ax = plt.subplots(nrows=2, ncols=3, figsize=(12, 6))
 
 plot00 = ax[0, 0].imshow(Y)
 # plt.colorbar(plot00)
