@@ -7,25 +7,26 @@ The goal is to fit the smoothing parameter / granularity coefficient of the
 Potts prior on a series of external label fields. This maximum likelihood
 estimate is used later on in the overal Bayesian image segmentation model.
 
-Author: W.M.Kouw
+Author: W.M. Kouw
 Date: 18-09-2018
 """
 import numpy as np
 import numpy.random as rnd
 import scipy.special as sp
 import scipy.optimize as opt
+import sklearn.cluster as cl
 
 
-class hiddenPottsMarkovRandomField(object):
+class hiddenPotts(object):
     """Hidden Potts-Markov Random Field."""
 
-    def __init__(self, neighbourhood_size=(3, 3), num_iter=5):
+    def __init__(self, patch_size=(3, 3), num_iter=5):
         """
         Initialize variables for an instance of a hidden Potts-MRF.
 
         Parameters
         ----------
-        neighbourhood_size : (int, int)
+        patch_size : (int, int)
             Size of the neighbourhood on which the variational approximation
             depends (def: (1, 1))
         num_iter : int
@@ -37,13 +38,10 @@ class hiddenPottsMarkovRandomField(object):
 
         """
         # Store model parameters
-        if np.all(neighbourhood_size >= (3, 3)):
-            self.neighbourhood_size = neighbourhood_size
+        if np.all(patch_size >= (1, 1)):
+            self.patch_size = patch_size
         else:
             raise ValueError('Neighbourhood size is too small')
-
-        # Optimization parameters
-        self.num_iter = num_iter
 
     def Hamiltonian(self, z):
         r"""
@@ -94,8 +92,12 @@ class hiddenPottsMarkovRandomField(object):
         return H
 
     def mean_field_Potts(self, beta, Z):
-        """
+        r"""
         Mean-field variational approximation to Potts log-likelihood function.
+
+        logp(z_i | z_{d_i}, beta) = 2*beta*\sum_{k=1}^{K} z_{ik}
+            \sum_{j \in \delta_{ik}} z_{jk} - \log \sum_{z_{i'}}
+            \exp(2*beta*\sum_{k=1}^{K} z_{i'k} \sum_{j \in \delta_{ik}} z_{jk})
 
         Parameters
         ----------
@@ -118,34 +120,31 @@ class hiddenPottsMarkovRandomField(object):
             if not np.all(np.unique(Z[:, :, k]) == [0, 1]):
                 raise ValueError("Label field is not binary in page " + str(k))
 
-        # Pad shape with zero edge for easier neighbourhood extraction
-        Z = np.pad(Z, [1, 1], mode='constant', constant_values=0)
-
         # Initialize negative log-likelihood
         nll = 0
 
         # Loop over pixels
-        for h in range(1, H-1):
-            for w in range(1, W-1):
+        for h in range(H):
+            for w in range(W):
 
                 # Initialize intermediate terms
-                chi_ik = 0
-                ksi_ik = 0
+                chi_i = 0
+                ksi_i = 0
 
                 # Select current class
                 for k in range(K):
 
                     # Extract neighbourhood of current class
-                    delta_ik = Z[h-1:h+2, w-1:w+2, k]
+                    d_ik = self.neighbourhood(Z[:, :, k], (h, w))
 
                     # First sum is neighbourhood comparison
-                    chi_ik += np.sum(Z[h, w, k] * delta_ik) - Z[h, w, k]**2
+                    chi_i += Z[h, w, k]*np.sum(d_ik)
 
                     # Second sum is purely over neighbourhood
-                    ksi_ik += np.exp(2*beta*(np.sum(delta_ik) - Z[h, w, k]))
+                    ksi_i += np.exp(2*beta*np.sum(d_ik))
 
                 # Update negative log-likelihood
-                nll += -2*beta*chi_ik + np.log(ksi_ik)
+                nll += -2*beta*chi_i + np.log(ksi_i)
 
         return nll
 
@@ -155,15 +154,15 @@ class hiddenPottsMarkovRandomField(object):
 
         Derivative has the following form:
 
-        d/db log q(z|b) = \sum_{i=1}^{n} 2 \sum_{l=1}^{K} z_{il} 
-            \sum_{j \in delta_i} 
+        d/db log q(z|b) = \sum_{i=1}^{n} 2 \sum_{l=1}^{K} z_{il}
+            \sum_{j \in delta_i}
 
         Parameters
         ----------
-        beta : float
-            Smoothing parameter / granularity coefficient
+        beta : array(float)
+            Smoothing parameters / granularity coefficients.
         Z : array (height by width by number of classes)
-            Label field to fit
+            Label field to fit.
 
 
         Returns
@@ -185,42 +184,42 @@ class hiddenPottsMarkovRandomField(object):
             if not np.all(np.unique(Z[:, :, k]) == [0, 1]):
                 raise ValueError("Label field is not binary in page " + str(k))
 
-        # Pad shape with zero edge for easier neighbourhood extraction
-        Z = np.pad(Z, [1, 1], mode='constant', constant_values=0)
-
         # Initialize log-likelihood
         dqdb = 0
 
         # Loop over pixels
-        for h in range(1, H-1):
-            for w in range(1, W-1):
+        for h in range(H):
+            for w in range(W):
 
                 # Initialize intermediate terms
-                chi_ik = 0
-                ksi_ik = 0
-                tau_ik = 0
+                chi_i = 0
+                ksi_i = 0
+                psi_i = np.zeros((K,))
 
                 # Select current class
                 for k in range(K):
 
-                    # Extract neighbourhood of current class
-                    delta_ik = np.ravel(Z[h-1:h+2, w-1:w+2, k])
+                    # Extract neighbourhood of current pixel
+                    d_ik = self.neighbourhood(Z[:, :, k], (h, w))
 
-                    # First sum is neighbourhood comparison
-                    chi_ik += 2*(np.sum(Z[h, w, k] * delta_ik) - Z[h, w, k]**2)
+                    # First term
+                    chi_i += Z[h, w, k]*np.sum(d_ik)
 
-                    # Second sum
-                    ksi_ik += 2*(np.sum(delta_ik) - Z[h, w, k])
+                    # Denominator
+                    ksi_i += np.exp(2*beta*np.sum(d_ik))
 
-                    # Second sum is purely over neighbourhood
-                    tau_ik += np.exp(2*beta*(np.sum(delta_ik) - Z[h, w, k]))
+                    # Numerator
+                    psi_i[k] = np.exp(2*beta*np.sum(d_ik))*(2*np.sum(d_ik))
 
                 # Update partial derivative
-                dqdb += -chi_ik + ksi_ik / tau_ik
+                dqdb += -2*chi_i + np.sum(psi_i / ksi_i)
 
-        return dqdb
+        return np.array(dqdb)
 
-    def maximum_likelihood_beta(self, Z, lb=[(0, None)], verbose=False):
+    def maximum_likelihood_beta(self, Z,
+                                lb=[(0, None)],
+                                verbose=False,
+                                max_iter=5):
         """
         Estimate beta on mean-field Potts likelihood.
 
@@ -233,11 +232,13 @@ class hiddenPottsMarkovRandomField(object):
             the smoothing parameter.
         verbose : bool
             Report final beta estimate.
+        max_iter : int
+            Maximum number of iterations for EM.
 
         Returns
         -------
         beta_hat : float
-            Estimated beta, or smoothing parameter, for given label field
+            Estimated beta, or smoothing parameter, for given label field.
 
         """
         # Check if Z is the right shape
@@ -247,17 +248,17 @@ class hiddenPottsMarkovRandomField(object):
             Z = self.one_hot(Z)
 
         # Initial value
-        beta0 = np.array([10.0])
+        beta0 = np.array([1.0])
 
         # Start optimization procedure
         beta_hat = opt.minimize(fun=self.mean_field_Potts,
                                 x0=beta0,
-                                args=(Z),
+                                args=Z,
                                 method='L-BFGS-B',
-                                # jac=self.mean_field_Potts_grad,
+                                jac=self.mean_field_Potts_grad,
                                 bounds=lb,
-                                options={'disp': True}
-                                )
+                                options={'disp': True,
+                                         'maxiter': max_iter})
 
         # Report value
         if verbose:
@@ -298,7 +299,7 @@ class hiddenPottsMarkovRandomField(object):
 
         return B
 
-    def neighbourhood(self, A, index, patch=True):
+    def neighbourhood(self, A, index):
         """
         Extract a neighbourhood of pixels around current pixel.
 
@@ -308,8 +309,6 @@ class hiddenPottsMarkovRandomField(object):
             Array from which to extract the pixel's neighbourhood.
         index : (int, int)
             Row and column index of current pixel.
-        patch : bool
-            Whether to pair only with direct upper, lower and side pixels.
 
         Returns
         -------
@@ -319,7 +318,7 @@ class hiddenPottsMarkovRandomField(object):
         # Shape of array
         H, W = A.shape
 
-        if not patch:
+        if np.all(self.patch_size == (1, 1)):
 
             # Initialize neighbourhood list
             delta_i = []
@@ -389,8 +388,8 @@ class hiddenPottsMarkovRandomField(object):
         else:
 
             # Patch step size
-            vstep = int((self.neighbourhood_size[0] - 1) / 2)
-            hstep = int((self.neighbourhood_size[1] - 1) / 2)
+            vstep = int((self.patch_size[0] - 1) / 2)
+            hstep = int((self.patch_size[1] - 1) / 2)
 
             # Pad image to allow slicing at the edges
             A = np.pad(A, [vstep, hstep], mode='constant', constant_values=0)
@@ -402,13 +401,13 @@ class hiddenPottsMarkovRandomField(object):
             # Initialize neighbourhood list
             return A[vslice, hslice]
 
-    def expectation_step(self, y, nu, theta, beta, neighbourhood_size=(1, 1)):
+    def expectation_step(self, X, nu, theta, beta):
         """
         Perform expectation step from variational-Bayes-EM.
 
         Parameters
         ----------
-        y : array
+        X : array
             Observed image.
         nu : array
             Array of variational parameters.
@@ -416,12 +415,12 @@ class hiddenPottsMarkovRandomField(object):
             Parameters of variational posterior of Potts model.
         beta : float
             Smoothing parameter.
-        neighbourhood_size : (int, int)
+        patch_size : (int, int)
             Size of the neighbourhood for mean-field.
 
         Returns
         -------
-        nu : array
+        q : array
             Updated array of variational parameters.
 
         """
@@ -429,11 +428,14 @@ class hiddenPottsMarkovRandomField(object):
         H, W, K = nu.shape
 
         # Unpack tuple of hyperparameters
-        mu, la, ga, ks = theta
+        em, la, ga, ks = theta
 
         for h in range(H):
             for w in range(W):
                 for k in range(K):
+
+                    # Take sum over neighbourhood
+                    d_ik = self.neighbourhood(nu[:, :, k], (h, w))
 
                     # Compute expectation of log(tau_l) w.r.t. phi_l
                     E_log_tau_l = sp.digamma(ga[k] / 2) - np.log(ks[k] / 2)
@@ -443,27 +445,27 @@ class hiddenPottsMarkovRandomField(object):
 
                     # Compute expectation of log p(y_i|phi_l) w.r.t. phi_l
                     E_log_py = (E_log_tau_l/2 -
-                                E_tau_l*(y[h, w] - mu[k])**2 / 2 -
-                                1 / (2*ks[k]))
-
-                    # Take sum over neighbourhood
-                    nu_di = self.neighbourhood(nu[:, :, k], (h, w))
+                                E_tau_l*(X[h, w] - em[k])**2 / 2 -
+                                1/(2*ks[k]))
 
                     # Update variational parameter at current pixel
-                    nu[h, w, k] = np.exp(E_log_py + 2*beta*np.sum(nu_di))
+                    nu[h, w, k] = np.exp(E_log_py + 2*beta*np.sum(d_ik))
 
                 # Normalize nu_i to 1
-                nu[h, w, :] = nu[h, w, :] / np.sum(nu[h, w, :])
+                if np.sum(nu[h, w, :]) == 0.0:
+                    raise RuntimeError('Underflow for variational parameters')
+                else:
+                    nu[h, w, :] = nu[h, w, :] / np.sum(nu[h, w, :])
 
         return nu
 
-    def maximization_step(self, y, nu, theta, theta0):
+    def maximization_step(self, X, nu, theta, theta0):
         """
         Perform maximization step from variational-Bayes-EM.
 
         Parameters
         ----------
-        y : array
+        X : array
             Observed image
         nu : array
             Variational parameters consisting of current segmentation.
@@ -482,8 +484,8 @@ class hiddenPottsMarkovRandomField(object):
         K = nu.shape[2]
 
         # Unpack tuples of hyperparameters
-        mu, la, ga, ks = theta
-        mu0, la0, ga0, ks0 = theta0
+        em, la, ga, ks = theta
+        em0, la0, ga0, ks0 = theta0
 
         # Iterate over classes
         for k in range(K):
@@ -494,27 +496,29 @@ class hiddenPottsMarkovRandomField(object):
             # Update gamma
             ga[k] = ga0[k] + np.sum(nu[:, :, k], axis=(0, 1))
 
-            # Update mu
-            mu[k] = (la0[k]*mu0[k] + np.sum(y*nu[:, :, k], axis=(0, 1)))/la[k]
+            # Update em
+            em[k] = (la0[k]*em0[k] + np.sum(X*nu[:, :, k], axis=(0, 1)))/la[k]
 
             # Update ksi
-            ks[k] = (ks0[k] + np.sum(y**2*nu[:, :, k], axis=(0, 1)) +
-                     la0[k]*mu0[k]**2 - la[k]*mu[k]**2)
+            ks[k] = (ks0[k] + np.sum(X**2*nu[:, :, k], axis=(0, 1)) +
+                     la0[k]*em0[k]**2 - la[k]*em[k]**2)
 
-        return mu, la, ga, ks
+        return em, la, ga, ks
 
-    def expectation_maximization(self, y, K, beta):
+    def expectation_maximization(self, X, K, beta, num_iter=1):
         """
         Perform variational Bayes Expectation-Maximization.
 
         Parameters
         ----------
-        y : array (height by width)
+        X : array (height by width)
             Image to be segmented.
         K : int
             Number of classes to segment image into.
         beta : float
             Smoothing parameter / granularity coefficient of Potts model.
+        num_iter : int
+            Number of iterations to run EM for.
 
         Returns
         -------
@@ -523,67 +527,82 @@ class hiddenPottsMarkovRandomField(object):
 
         """
         # Get shape of image
-        H, W = y.shape
+        H, W = X.shape
 
         # Initialize hyperparameters
-        mu0 = np.zeros((K,))
-        la0 = np.zeros((K,))
-        ga0 = np.ones((K,)) / 2
-        ks0 = np.ones((K,)) / 2
-        theta0 = (mu0, la0, ga0, ks0)
+        em0 = np.zeros((K,), dtype='float32')
+        la0 = np.ones((K,))*0.05
+        ga0 = np.ones((K,))*1.0
+        ks0 = np.ones((K,))*1.0
 
-        # Copy hyperparameter array for updating
-        theta = np.copy(theta0)
+        # Initialize posterior hyperparameters
+        ga = rnd.randn(K,)*0.5 + ga0
+        ks = rnd.randn(K,)*0.5 + ks0
 
-        # Initialize variational parameters array
-        nu = rnd.randn(H, W, K)
+        # Use k-means to help initialize parameters
+        kM = cl.KMeans(n_clusters=K, max_iter=500).fit(X.reshape((-1, 1)))
+        Xp = kM.predict(X.reshape((-1, 1)))
+        Xt = kM.transform(X.reshape((-1, 1)))
 
-        for r in range(self.num_iter):
+        # Initialize means with cluster centers
+        em = kM.cluster_centers_.reshape((-1, ))
+
+        # Initialize precision with cluster distance variances
+        la = np.zeros((K, ))
+        for k in range(K):
+            la[k] = 1/np.var(Xt[Xp == k])
+
+        # Initialize class indicators with k-means predictions
+        nu = self.one_hot(Xp.reshape((H, W)))
+
+        # Pack parameters into sets
+        theta0 = (em0, la0, ga0, ks0)
+        theta = (em, la, ga, ks)
+
+        for r in range(num_iter):
 
             # Report progress
-            print('At iteration ' + str(r+1) + '/' + str(self.num_iter))
+            print('At iteration ' + str(r+1) + '/' + str(num_iter))
 
             # Expectation step
-            nu = self.expectation_step(y, nu, theta, beta)
+            nu = self.expectation_step(X, nu, theta, beta)
 
             # Expectation step
-            theta = self.maximization_step(y, nu, theta, theta0)
+            theta = self.maximization_step(X, nu, theta, theta0)
 
         # Return segmentation along with estimated parameters
         return nu, theta
 
-    def segment(self, y, K, Q=[], beta=1.0, output_params=False):
+    def segment(self, X, K, beta, num_iter=1):
         """
         Segment an image.
 
         Parameters
         ----------
-        y : array
-            image to be segmented.
+        X : array
+            Image to be segmented.
         K : int
-            number of classes
-        Q : array
-            segmented image to copy smoothness from.
-        beta : float
-            Smoothing parameter.
-        output_params : bool
-            Whether to output the estimated hyperparameters.
+            Number of classes.
+        beta : int
+            Smoothness parameter for Potts prior.
+        num_iter : int
+            Number of iterations to perform optimization.
 
         Returns
         -------
-        z : array
-            segmentation produced by the model.
+        Z : array
+            Segmentation produced by the model.
+        nu : array
+            Posterior indicator distributions.
+        theta : tuple of arrays
+            Posterior hyperparameters of parameter distributions.
 
         """
-        # Check for auxiliary segmentation
-        if np.any(Q):
-            beta = self.maximum_likelihood_beta(Q, verbose=True)
-
         # Perform VB-EM for segmenting the image
-        nu, theta = self.expectation_maximization(y, K, beta)
+        nu, theta = self.expectation_maximization(X, K, beta, num_iter)
 
-        # Return segmented image
-        if output_params:
-            return nu, theta
-        else:
-            return nu
+        # Compute most likely class
+        Z_hat = np.argmax(nu, axis=2)
+
+        # Return segmented image, variational posteriors and parameters
+        return Z_hat, nu, theta
