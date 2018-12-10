@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Sanity check to test variational GMM implementation
+Test variational GMM implementation on checkerboard image.
 
 Author: W.M.Kouw
 Date: 05-11-2018
@@ -59,10 +59,10 @@ for r in np.arange(nR):
         X[Y == k] += rnd.normal(mu[k], np.sqrt(si2[k]), np.sum(Y == k))
 
     # Initialize model
-    model = variationalGaussianMixture()
+    model = variationalGaussianMixture(num_components=2)
 
     # Segment image
-    Y_hat, nu, theta = model.segment(X, K=nK, num_iter=nI)
+    Y_hat, nu, theta = model.segment(X, max_iter=nI)
 
     # Store estimated parameters
     la_h[r, :], be_h[r, :], ce_h[r, :], em_h[r, :], ve_h[r, :] = theta

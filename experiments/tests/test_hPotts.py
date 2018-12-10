@@ -41,7 +41,7 @@ shape = (20, 20)
 
 '''Repeat experiment'''
 
-beta_hat = np.zeros((nR,))
+beta_hat = np.zeros((nR, nK))
 em_hat = np.zeros((nR, nK))
 la_hat = np.zeros((nR, nK))
 ga_hat = np.zeros((nR, nK))
@@ -60,23 +60,26 @@ for r in np.arange(nR):
         X[Y == k] += rnd.normal(mu[k], np.sqrt(si2[k]), np.sum(Y == k))
 
     # Initialize model
-    model = hiddenPotts(patch_size=(1, 1))
+    model = hiddenPotts(num_classes=nK, tissue_specific=True)
+
+    # Map label image to one-hot
+    Y1 = model.one_hot(Y)
 
     # Estimate smoothing parameter
-    beta_hat[r] = model.maximum_likelihood_beta(Y, verbose=True, max_iter=10)
+    beta_hat[r, :] = model.maximum_likelihood_beta(Y1, max_iter=10)
 
     # Segment image
-    Y_hat, nu, theta = model.segment(X, K=nK, beta=beta_hat[r], num_iter=50)
+    Y_hat, nu, theta = model.segment(X, beta=beta_hat[r, :], num_iter=10)
 
     # Store estimated parameters
     em_hat[r, :], la_hat[r, :], ga_hat[r, :], ks_hat[r, :] = theta
 
     # Plot images, plus error image
     if vis:
-        plot_segmentations(Y, X, Y_hat)
+        plot_segmentations(Y, X, Y_hat, show=True)
 
 # Report results
-print('Mean estimated beta = ' + str(np.mean(beta_hat)))
+print('Mean estimated beta = ' + str(np.mean(beta_hat, axis=0)))
 
 '''Posteriors for hyperparameters.'''
 

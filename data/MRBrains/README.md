@@ -1,0 +1,1 @@
+Please download the MRBrainS training set from [http://mrbrains13.isi.uu.nl/](http://mrbrains13.isi.uu.nl/).

@@ -1,6 +1,6 @@
-# Informed priors for hidden Potts-MRFs
+# Cross-center informative priors
 
-In this project, I aim to learn an informative prior for a Bayesian image
+In this project, I aim to learn a cross-center informative prior for a Bayesian image
 segmentation model with a Potts-Markov Random Field as a prior for the labels.
 
 By doing a variational approximation of the Potts prior, we can obtain a form that allows for maximum likelihood estimation of the smoothness parameter \beta. Using an additional data set consisting purely of labeled images, one could obtain an estimate of \beta. Essentially, you are setting the Potts-prior to mimic the smoothness of segmentation in another data set.
