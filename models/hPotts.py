@@ -20,6 +20,7 @@ from scipy.optimize import minimize
 
 from sklearn.cluster import KMeans
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.feature_extraction.image import extract_patches_2d
 
 import matplotlib.pyplot as plt
 from vis import plot_posteriors
@@ -470,7 +471,7 @@ class VariationalGaussianMixture(VariationalMixture):
 
             # Set responsibilities based on kNN prediction
             rho = np.zeros((H*W, self.K))
-            rho[~O,:] = kNN.predict_proba(X[~O,:])
+            rho[~O, :] = kNN.predict_proba(X[~O,:])
             rho[O, :] = Y[O,:].astype('float64')
 
             # Concentration hyperparameters
@@ -1074,7 +1075,7 @@ class VariationalHiddenPotts(VariationalMixture):
                 mt[k, :] = np.sum(rho[:, [k]] * X, axis=0) / np.sum(rho[:, k])
 
                 # Hyperprecisions
-                Wt[:, :, k] = np.cov(X.T, aweights=rho[:, k]) * nt[k]
+                Wt[:, :, k] = np.eye(D)
 
             # Reshape responsibilities
             rho = rho.reshape((H, W, self.K))
@@ -1112,21 +1113,9 @@ class VariationalHiddenPotts(VariationalMixture):
             for k in range(self.K):
 
                 # Focuse hypermeans on labeled pixels
-                # mt[k, :] = np.sum(rho[:, [k]] * X, axis=0) / np.sum(rho[:, k])
-                mt[k, :] = X[Y[:, k] == 1, :]
+                mt[k, :] = np.mean(X[Y[:, k] == 1, :], axis=0)
 
-                # Weighted covariance
-                C = (rho[:, [k]] * (X - mt[k, :])).T @ (X - mt[k, :])
-
-                # Check for zero precision
-                C = np.maximum(1e-6, C)
-
-                # # Set hyperprecisions
-                # if D == 1:
-                #     Wt[:, :, k] = 1 / (nt[k] * C)
-                # else:
-                #     Wt[:, :, k] = inv(nt[k] * C)
-
+                # Hyperprecisions
                 Wt[:, :, k] = np.eye(D)
 
             # Reshape responsibilities

@@ -1,18 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Script to test VB-EM Potts on Brainweb1.5T data.
+Script to test VB-EM Potts on IBSR20 data.
 
 Author: W.M.Kouw
 Date: 13-12-2018
 """
 import numpy as np
 import numpy.random as rnd
-import scipy.ndimage as nd
 from scipy.spatial.distance import dice
 
 import matplotlib.pyplot as plt
-from skimage.segmentation import mark_boundaries
 
 from sklearn.mixture import BayesianGaussianMixture
 from sklearn.neighbors import KNeighborsClassifier
@@ -26,19 +24,19 @@ from vis import plot_segmentation, plot_clustering, plot_scan
 '''Experimental parameters'''
 
 # Generic filename for this experiment
-fn = 'exp-brainweb-'
+fn = 'exp-ibsr-'
 
 # Number to save results to
-savenumber = '03'
+savenumber = '01'
 
 # Number of repetitions
-nR = 1
+nR = 5
 
 # Visualize predictions
-vis = True
+vis = False
 
 # Number of patients
-nP = 20
+nP = 18
 
 # Number of classes
 K = 4
@@ -59,7 +57,7 @@ err = np.ones((6, nP, nR))
 dcc = np.ones((6, nP, nR))
 
 # Set smoothing parameter
-beta = np.array([0.1, 0.1, 0.1, 0.1])
+beta = np.array([1.0, 1.0, 1.0, 1.0])
 
 '''Repeat experiment'''
 
@@ -71,43 +69,29 @@ Wt = np.zeros((D, D, K))
 
 for r in range(nR):
     # Report progress
-    print('\nAt repetition ' + str(r+1) + '/' + str(nR))
+    print('At repetition ' + str(r+1) + '/' + str(nR) + '\n')
 
-    for n in np.arange(nP):
+    for n in range(nP):
         # Report progress
         print('At patient ' + str(n+1) + '/' + str(nP) + '\n')
 
-        # Patient directory
-        pdir = '../data/Brainweb/subject' + str(n+1).zfill(2) + '_256'
+        # Filename current patient
+        trn_dir = '../data/IBSR/IBSR_' + str(n + 1).zfill(2)
+        fnX = trn_dir + '/IBSR_' + str(n + 1).zfill(2) + '_ana.nii'
+        fnY = trn_dir + '/IBSR_' + str(n + 1).zfill(2) + '_seg_ana.nii'
+        fnM = trn_dir + '/IBSR_' + str(n + 1).zfill(2) + '_ana_brainmask.nii'
 
         # Load scan
-        X = np.fromfile(pdir + '_GE2D_1.5T_RSS.raw', count=H*W, dtype='uint8')
+        X = subject2image(fnX, slice_dim=1, slice_ix=128, flipud=True, normalize=True)
+        Y = subject2image(fnY, slice_dim=2, slice_ix=128, flipud=True, seg=True)
 
-        # Reshape binary list to image
-        X = nd.rotate(X.reshape((H, W)), 90)
-
-        # Normalize observations
-        X[X < 0] = 0
-        X[X > 255] = 255
-        X = X / 255.
-
-        # Load segmentation
-        Y = np.fromfile(pdir + '.raw', count=H*W, dtype='uint8')
-
-        # Reshape binary list to image
-        Y = nd.rotate(Y.reshape((H, W)), 90)
-
-        # Restrict segmentation
-        for k in np.setdiff1d(np.unique(Y), np.arange(K)):
-            Y[Y == k] = 0
-
-        # Brain mask
+        # Find brain mask
         M = (Y != 0)
 
         # Strip skull
         X[~M] = 0
 
-        # # Add activations as channels
+        # Add activations as channels
         # X = np.dstack((X, X_))
         X = np.atleast_3d(X)
 
@@ -133,13 +117,10 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'TRUE_scan_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_scan(X[:, :, 0], savefn=fn_segs)
+            plot_scan(X[30:-30, 30:-30, 0], savefn=fn_segs)
 
             fn_segs = fn + 'TRUE_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_segmentation(Y, savefn=fn_segs)
-
-        # Shape of X
-        H, W, D = X.shape
+            plot_segmentation(Y[30:-30, 30:-30], savefn=fn_segs)
 
         '''Scikit's VB GMM'''
 
@@ -167,7 +148,10 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'SCK_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_clustering(X[:, :, 0], Y_h, mode='subpixel', savefn=fn_segs)
+            plot_clustering(X[30:-30, 30:-30, 0],
+                            Y_h[30:-30, 30:-30],
+                            mode='subpixel',
+                            savefn=fn_segs)
 
         ''' Unsupervised Gaussian Mixture '''
 
@@ -191,7 +175,10 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'UGM_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_clustering(X[:, :, 0], Y_h, mode='subpixel', savefn=fn_segs)
+            plot_clustering(X[30:-30, 30:-30, 0],
+                            Y_h[30:-30, 30:-30],
+                            mode='subpixel',
+                            savefn=fn_segs)
 
         ''' Semi-supervised Gaussian Mixture '''
 
@@ -212,7 +199,7 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'SGM_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_segmentation(Y_h, savefn=fn_segs)
+            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
         ''' Unsupervised hidden Potts'''
 
@@ -238,7 +225,10 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'UHP_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_clustering(X[:, :, 0], Y_h, mode='subpixel', savefn=fn_segs)
+            plot_clustering(X[30:-30, 30:-30, 0],
+                            Y_h[30:-30, 30:-30],
+                            mode='subpixel',
+                            savefn=fn_segs)
 
         ''' Semi-supervised hidden Potts'''
 
@@ -261,7 +251,7 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'SHP_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_segmentation(Y_h, savefn=fn_segs)
+            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
         '''Nearest neighbours'''
 
@@ -285,7 +275,7 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'KNN_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_segmentation(Y_h, savefn=fn_segs)
+            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
 # Save error results
 np.save('results/' + fn + '_errors_' + str(savenumber) + '.npy', err)

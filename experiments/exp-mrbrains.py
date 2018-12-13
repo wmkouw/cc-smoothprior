@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Script to test VB-EM Potts on Brainweb data.
+Script to test VB-EM Potts on MRBrainS13 data.
 
 Author: W.M.Kouw
-Date: 30-10-2018
+Date: 13-12-2018
 """
-import pandas as pd
 import numpy as np
 import numpy.random as rnd
-import scipy.optimize as opt
-import scipy.stats as st
-import scipy.ndimage as nd
+from scipy.spatial.distance import dice
+
 import matplotlib.pyplot as plt
 
 from sklearn.mixture import BayesianGaussianMixture
@@ -19,20 +17,23 @@ from sklearn.neighbors import KNeighborsClassifier
 
 from hPotts import VariationalHiddenPotts
 from vGMI import UnsupervisedGaussianMixture, SemisupervisedGaussianMixture
-from util import subject2image, set_classes
-from vis import plot_segmentations, plot_posteriors
+from util import subject2image, set_classes, filter_Sobel
+from vis import plot_segmentation, plot_clustering, plot_scan
 
 
 '''Experimental parameters'''
 
+# Generic filename for this experiment
+fn = 'exp-mrbrains-'
+
 # Number to save results to
-savenumber = '02'
+savenumber = '05'
 
 # Number of repetitions
 nR = 10
 
 # Visualize predictions
-vis = True
+vis = False
 
 # Number of patients
 nP = 5
@@ -48,15 +49,18 @@ H = 256
 W = 256
 
 # Maximum number of iterations
-max_iter = 50
+max_iter = 30
 x_tol = 1e-3
 
 # Preallocate result array
 err = np.ones((6, nP, nR))
+dcc = np.ones((6, nP, nR))
+
+# Set smoothing parameter
+beta = np.array([1.0, 1.0, 1.0, 1.0])
 
 '''Repeat experiment'''
 
-beta_hat = np.zeros((nP, K))
 at = np.zeros((K,))
 bt = np.zeros((K,))
 nt = np.zeros((K,))
@@ -65,7 +69,7 @@ Wt = np.zeros((D, D, K))
 
 for r in range(nR):
     # Report progress
-    print('At repetition ' + str(r+1) + '/' + str(nR) + '\n')
+    print('\nAt repetition ' + str(r+1) + '/' + str(nR))
 
     for n in range(nP):
         # Report progress
@@ -89,15 +93,12 @@ for r in range(nR):
         # Strip skull
         X[~M] = 0
 
-        # y = np.zeros((H, W, K), dtype='bool')
-        # y[50, 50, 0] = True
-        # y[100, 120, 1] = True
-        # y[155, 120, 2] = True
-        # y[90, 100, 3] = True
-        # z = np.array([[50, 50, 0],
-        #               [100, 130, 1],
-        #               [155, 120, 2],
-        #               [85, 95, 3]])
+        # # Add activations as channels
+        # X = np.dstack((X, X_))
+        X = np.atleast_3d(X)
+
+        # Random sampling weights
+        sample_weights = np.exp(-filter_Sobel(X)[:, :, 0])
 
         # Given labels
         y = np.zeros((H, W, K), dtype='bool')
@@ -106,13 +107,22 @@ for r in range(nR):
 
             # Indices of labels
             Yk = np.argwhere(Y == k)
+            Wk = sample_weights[Y == k]
 
             # Choose labels
-            ix = rnd.choice(np.arange(Yk.shape[0]), size=1)
+            ix = rnd.choice(np.arange(Yk.shape[0]), size=1, p=Wk / np.sum(Wk))
 
             # One-hot label image
-            y[Yk[ix, 0], Yk[ix, 1], k] = 1
+            y[Yk[ix, 0], Yk[ix, 1], k] = True
             z[k, :] = np.array([Yk[ix, 0], Yk[ix, 1], k])
+
+        if vis:
+
+            fn_segs = fn + 'TRUE_scan_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_scan(X[30:-30, 30:-30, 0], savefn=fn_segs)
+
+            fn_segs = fn + 'TRUE_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_segmentation(Y[30:-30, 30:-30], savefn=fn_segs)
 
         '''Scikit's VB GMM'''
 
@@ -135,14 +145,15 @@ for r in range(nR):
 
         # Compute error
         err[0, n, r] = np.mean(Y_h[M] != Y[M])
+        dcc[0, n, r] = dice(Y_h[M], Y[M])
 
         if vis:
 
-            fn_segs = 'exp-mrbrains_SCK_segs_p' + str(n+1) + '.png'
-            fn_post = 'exp-mrbrains_SCK_post_p' + str(n+1) + '.png'
-
-            plot_segmentations(Y, X[:, :, 0], Y_h, savefn=fn_segs)
-            # plot_posteriors(post, savefn=fn_post)
+            fn_segs = fn + 'SCK_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_clustering(X[30:-30, 30:-30, 0],
+                            Y_h[30:-30, 30:-30],
+                            mode='subpixel',
+                            savefn=fn_segs)
 
         ''' Unsupervised Gaussian Mixture '''
 
@@ -161,14 +172,15 @@ for r in range(nR):
 
         # Compute error
         err[1, n, r] = np.mean(Y_h[M] != Y[M])
+        dcc[1, n, r] = dice(Y_h[M], Y[M])
 
         if vis:
 
-            fn_segs = 'exp-mrbrains_UGM_segs_p' + str(n+1) + '.png'
-            fn_post = 'exp-mrbrains_UGM_post_p' + str(n+1) + '.png'
-
-            plot_segmentations(Y, X[:, :, 0], Y_h, savefn=fn_segs)
-            # plot_posteriors(post, savefn=fn_post)
+            fn_segs = fn + 'UGM_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_clustering(X[30:-30, 30:-30, 0],
+                            Y_h[30:-30, 30:-30],
+                            mode='subpixel',
+                            savefn=fn_segs)
 
         ''' Semi-supervised Gaussian Mixture '''
 
@@ -184,13 +196,12 @@ for r in range(nR):
 
         # Compute error
         err[2, n, r] = np.mean(Y_h[M] != Y[M])
+        dcc[2, n, r] = dice(Y_h[M], Y[M])
 
         if vis:
-            fn_segs = 'exp-mrbrains_SGM_segs_p' + str(n+1) + '.png'
-            fn_post = 'exp-mrbrains_SGM_post_p' + str(n+1) + '.png'
 
-            plot_segmentations(Y, X[:, :, 0], Y_h, savefn=fn_segs)
-            # plot_posteriors(post, savefn=fn_post)
+            fn_segs = fn + 'SGM_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
         ''' Unsupervised hidden Potts'''
 
@@ -202,26 +213,24 @@ for r in range(nR):
                                      init_params='kmeans',
                                      tissue_specific=True)
 
-        # Estimate smoothing parameter
-        beta_hat[n, :] = UHP.maximum_likelihood_beta(UHP.one_hot(Y),
-                                                     max_iter=max_iter)
-
         # Segment image
-        Y_h, post, theta = UHP.segment(X, beta=beta_hat[n, :])
+        Y_h, post, theta = UHP.segment(X, beta=beta)
 
         # Set cluster assignments to correct tissue labels
         Y_h = set_classes(Y_h, z)
 
         # Compute error
         err[3, n, r] = np.mean(Y_h[M] != Y[M])
+        dcc[3, n, r] = dice(Y_h[M], Y[M])
 
         # Plot images, plus error image
         if vis:
-            fn_segs = 'exp-mrbrains_UHP_segs_p' + str(n+1) + '.png'
-            fn_post = 'exp-mrbrains_UHP_post_p' + str(n+1) + '.png'
 
-            plot_segmentations(Y, X[:, :, 0], Y_h, savefn=fn_segs)
-            # plot_posteriors(post, savefn=fn_post)
+            fn_segs = fn + 'UHP_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_clustering(X[30:-30, 30:-30, 0],
+                            Y_h[30:-30, 30:-30],
+                            mode='subpixel',
+                            savefn=fn_segs)
 
         ''' Semi-supervised hidden Potts'''
 
@@ -233,23 +242,18 @@ for r in range(nR):
                                      tol=x_tol,
                                      tissue_specific=True)
 
-        # Estimate smoothing parameter
-        beta_hat[n, :] = SHP.maximum_likelihood_beta(SHP.one_hot(Y),
-                                                     max_iter=max_iter)
-
         # Segment image
-        Y_h, post, theta = SHP.segment(X, y, beta=beta_hat[n, :])
+        Y_h, post, theta = SHP.segment(X, y, beta=beta)
 
         # Compute error
         err[4, n, r] = np.mean(Y_h[M] != Y[M])
+        dcc[4, n, r] = dice(Y_h[M], Y[M])
 
         # Plot images, plus error image
         if vis:
-            fn_segs = 'exp-mrbrains_SHP_segs_p' + str(n+1) + '.png'
-            fn_post = 'exp-mrbrains_SHP_post_p' + str(n+1) + '.png'
 
-            plot_segmentations(Y, X[:, :, 0], Y_h, savefn=fn_segs)
-            # plot_posteriors(post, savefn=fn_post)
+            fn_segs = fn + 'SHP_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
         '''Nearest neighbours'''
 
@@ -267,18 +271,39 @@ for r in range(nR):
 
         # Compute error
         err[5, n, r] = np.mean(Y_h[M] != Y[M])
+        dcc[5, n, r] = dice(Y_h[M], Y[M])
 
         # Plot images, plus error image
         if vis:
-            fn_segs = 'exp-mrbrains_KNN_segs_p' + str(n+1) + '.png'
 
-            plot_segmentations(Y, X[:, :, 0], Y_h, savefn=fn_segs)
+            fn_segs = fn + 'KNN_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
+
+# Save error results
+np.save('results/' + fn + '_errors_' + str(savenumber) + '.npy', err)
+np.save('results/' + fn + '_dice_' + str(savenumber) + '.npy', dcc)
+
+print('Mean error:')
+print('Error SCK = ' + str(np.mean(err[0, :, :], axis=(0, 1))))
+print('Error UGM = ' + str(np.mean(err[1, :, :], axis=(0, 1))))
+print('Error SGM = ' + str(np.mean(err[2, :, :], axis=(0, 1))))
+print('Error UHP = ' + str(np.mean(err[3, :, :], axis=(0, 1))))
+print('Error SHP = ' + str(np.mean(err[4, :, :], axis=(0, 1))))
+print('Error kNN = ' + str(np.mean(err[5, :, :], axis=(0, 1))))
 
 # Report errors
-print('Error scikit = ' + str(np.mean(err[0, :, :], axis=(0, 1))))
-print('Error unsupervised GMM = ' + str(np.mean(err[1, :, :], axis=(0, 1))))
-print('Error semi-supervised GMM = ' + str(np.mean(err[2, :, :], axis=(0, 1))))
-print('Error unsupervised VHP = ' + str(np.mean(err[3, :, :], axis=(0, 1))))
-print('Error semi-supervised VHP = ' + str(np.mean(err[4, :, :], axis=(0, 1))))
-print('Error supervised kNN = ' + str(np.mean(err[5, :, :], axis=(0, 1))))
-np.save('exp-mrbrains_errors_' + str(savenumber) + '.npy', err)
+print('Standard error of the mean:')
+print('SEM SCK = ' + str(np.std(err[0, :, :]) / np.sqrt(nR)))
+print('SEM UGM = ' + str(np.std(err[1, :, :]) / np.sqrt(nR)))
+print('SEM SGM = ' + str(np.std(err[2, :, :]) / np.sqrt(nR)))
+print('SEM UHP = ' + str(np.std(err[3, :, :]) / np.sqrt(nR)))
+print('SEM SHP = ' + str(np.std(err[4, :, :]) / np.sqrt(nR)))
+print('SEM kNN = ' + str(np.std(err[5, :, :]) / np.sqrt(nR)))
+
+print('Mean DICE:')
+print('DICE SCK = ' + str(np.mean(dcc[0, :, :], axis=(0, 1))))
+print('DICE UGM = ' + str(np.mean(dcc[1, :, :], axis=(0, 1))))
+print('DICE SGM = ' + str(np.mean(dcc[2, :, :], axis=(0, 1))))
+print('DICE UHP = ' + str(np.mean(dcc[3, :, :], axis=(0, 1))))
+print('DICE SHP = ' + str(np.mean(dcc[4, :, :], axis=(0, 1))))
+print('DICE kNN = ' + str(np.mean(dcc[5, :, :], axis=(0, 1))))

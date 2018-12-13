@@ -6,6 +6,7 @@ Last updated: 30-10-2018
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.segmentation import mark_boundaries
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
@@ -36,6 +37,56 @@ def plot_posteriors(posts, show=False, savefn=''):
         # Save figure without padding
         fg.savefig(savefn, bbox_inches='tight', pad_inches=0.0)
 
+
+def plot_clustering(X, Y_hat,
+                    color=[1, 0, 0],
+                    mode='outer',
+                    show=False,
+                    savefn=''):
+    """Plot boundaries produced by segmentation."""
+    # Initialize subplots
+    fg, ax = plt.subplots(ncols=1, figsize=(10, 10))
+
+    # Plot prediction
+    im = ax.imshow(mark_boundaries(X, Y_hat,
+                                   color=color,
+                                   mode=mode,
+                                   background_label=0))
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(im, cax=cax)
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+
+    if show:
+        # Pause to show figure
+        plt.show()
+
+    if savefn:
+        # Save figure without padding
+        fg.savefig(savefn, bbox_inches='tight', pad_inches=0.0)
+
+def plot_scan(X, show=False, savefn=''):
+    """Plot scan."""
+    # Initialize subplots
+    fg, ax = plt.subplots(ncols=1, figsize=(10, 10))
+
+    # Plot prediction
+    im = ax.imshow(X, vmin=0.0, vmax=1.0, cmap='bone')
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    plt.colorbar(im, cax=cax)
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+
+    if show:
+        # Pause to show figure
+        plt.show()
+
+    if savefn:
+        # Save figure without padding
+        fg.savefig(savefn, bbox_inches='tight', pad_inches=0.0)
 
 def plot_segmentation(Y_hat, show=False, savefn=''):
     """Plot true segmentation, observation and estimated segmentation."""

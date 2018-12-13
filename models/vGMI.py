@@ -207,14 +207,14 @@ class VariationalMixture(object):
         # Stable log-determinant
         return np.sum(2*np.log(np.diag(L)))
 
-    def distW(self, X, W):
+    def distW(self, X, S):
         """
         Compute weighted distance.
 
         Parameters
         ----------
-        x : array
-            Vectors (N by D).
+        X : array
+            Vectors (N by D) or (H by W by D).
         W : array
             Weights (D by D).
 
@@ -224,17 +224,40 @@ class VariationalMixture(object):
             Weighted distance for each vector.
 
         """
-        # Shapes
-        N, D = X.shape
+        if not S.shape[0] == S.shape[1]:
+            raise ValueError('Weight matrix not symmetric.')
 
-        # Preallocate
-        A = np.zeros((N,))
+        if not X.shape[-1] == S.shape[0]:
+            raise ValueError('Dimensionality of data and weights mismatch.')
 
-        # Loop over samples
-        for n in range(N):
+        if len(X.shape) == 2:
 
-            # Compute weighted inner product between vectors
-            A[n] = X[n, :] @ W @ X[n, :].T
+            # Shapes
+            N, D = X.shape
+
+            # Preallocate
+            A = np.zeros((N,))
+
+            # Loop over samples
+            for n in range(N):
+
+                # Compute weighted inner product between vectors
+                A[n] = X[n, :] @ S @ X[n, :].T
+
+        elif len(X.shape) == 3:
+
+            # Shape
+            H, W, D = X.shape
+
+            # Preallocate
+            A = np.zeros((H, W))
+
+            # Loop over samples
+            for h in range(H):
+                for w in range(W):
+
+                    # Compute weighted inner product between vectors
+                    A[h, w] = X[h, w, :] @ S @ X[h, w, :].T
 
         return A
 
@@ -445,7 +468,7 @@ class UnsupervisedGaussianMixture(VariationalMixture):
                 mt[k, :] = np.mean(X, axis=0) + rnd.randn(1, D)*.1
 
                 # Hyperprecisions
-                Wt[:, :, k] = np.cov(X.T) / bt[k] + rnd.randn(D, D)*.1
+                Wt[:, :, k] = np.eye(D)
 
             # Initialize variational posterior responsibilities
             rho = np.ones((H, W, self.K)) / self.K
@@ -476,10 +499,7 @@ class UnsupervisedGaussianMixture(VariationalMixture):
                 mt[k, :] = np.sum(rho[:, [k]] * X, axis=0) / np.sum(rho[:, k])
 
                 # Hyperprecisions
-                if D == 1:
-                    Wt[:, :, k] = 1 / (nt[k]*np.cov(X.T, aweights=rho[:, k]))
-                else:
-                    Wt[:, :, k] = inv(np.cov(X.T, aweights=rho[:, k]) * nt[k])
+                Wt[:, :, k] = np.eye(D)
 
         else:
             raise ValueError('Provided method not recognized.')
@@ -658,9 +678,6 @@ class UnsupervisedGaussianMixture(VariationalMixture):
         # Check for underflow problems
         if np.any(np.sum(rho, axis=1) == 0.0):
             raise RuntimeError('Variational parameter underflow.')
-
-        # # Plot posteriors of each tissue
-        # plot_posteriors(rho.reshape((H, W, self.K)), savefn=savefn)
 
         return rho.reshape((H, W, self.K))
 
@@ -1002,7 +1019,7 @@ class SemisupervisedGaussianMixture(VariationalMixture):
                 mt[k, :] = np.mean(X, axis=0) + rnd.randn(1, D)*.1
 
                 # Hyperprecisions
-                Wt[:, :, k] = np.cov(X.T) / bt[k] + rnd.randn(D, D)*.1
+                Wt[:, :, k] = np.eye(D)
 
             # Initialize variational posterior responsibilities
             rho = np.ones((H, W, self.K)) / self.K
@@ -1033,7 +1050,10 @@ class SemisupervisedGaussianMixture(VariationalMixture):
                 mt[k, :] = np.sum(rho[:, [k]] * X, axis=0) / np.sum(rho[:, k])
 
                 # Hyperprecisions
-                Wt[:, :, k] = np.cov(X.T, aweights=rho[:, k]) * nt[k]
+                Wt[:, :, k] = np.eye(D)
+
+            # Reshape responsibilities
+            rho = rho.reshape((H, W, self.K))
 
         elif self.init_params in ('nn', 'knn'):
 
@@ -1051,8 +1071,8 @@ class SemisupervisedGaussianMixture(VariationalMixture):
 
             # Set responsibilities based on kNN prediction
             rho = np.zeros((H*W, self.K))
-            rho[~O,:] = kNN.predict_proba(X[~O,:])
-            rho[O, :] = Y[O,:].astype('float64')
+            rho[~O, :] = kNN.predict_proba(X[~O, :])
+            rho[O, :] = Y[O, :].astype('float64')
 
             # Concentration hyperparameters
             at = np.sum(rho, axis=0)
@@ -1068,11 +1088,13 @@ class SemisupervisedGaussianMixture(VariationalMixture):
             for k in range(self.K):
 
                 # Hypermean
-                # mt[k, :] = np.sum(rho[:, [k]] * X, axis=0) / np.sum(rho[:, k])
-                mt[k, :] = X[Y[:, k] == 1, :]
+                mt[k, :] = np.mean(X[Y[:, k] == 1, :], axis=0)
 
-                # Hyperprecision
-                Wt[:, :, k] = np.cov(X.T, aweights=rho[:, k]) * nt[k]
+                # Hyperprecisions
+                Wt[:, :, k] = np.eye(D)
+
+            # Reshape responsibilities
+            rho = rho.reshape((H, W, self.K))
 
         else:
             raise ValueError('Provided method not recognized.')
@@ -1198,7 +1220,7 @@ class SemisupervisedGaussianMixture(VariationalMixture):
 
         return F
 
-    def expectation_step(self, X, Y, rho, thetat, savefn=''):
+    def expectation_step(self, X, Y, rho, thetat):
         """
         Perform expectation step.
 
@@ -1218,19 +1240,19 @@ class SemisupervisedGaussianMixture(VariationalMixture):
         # Shape of variational parameter array
         H, W, D = X.shape
 
-        # Reshape arrays
-        X = X.reshape((H*W, D))
-        Y = Y.reshape((H*W, self.K))
-        rho = rho.reshape((H*W, self.K))
+        # # Reshape arrays
+        # X = X.reshape((H*W, D))
+        # Y = Y.reshape((H*W, self.K))
+        # rho = rho.reshape((H*W, self.K))
 
         # Observation indicator vector
-        O = np.any(Y != 0, axis=1)
+        M = np.all(Y == False, axis=2)
 
         # Unpack tuple of hyperparameters
         at, bt, nt, mt, Wt = thetat
 
         # Initialize logarithmic rho
-        log_rho = np.zeros((np.sum(~O), self.K))
+        lrho = np.zeros((H, W, self.K), dtype='float64')
 
         for k in range(self.K):
 
@@ -1238,29 +1260,25 @@ class SemisupervisedGaussianMixture(VariationalMixture):
             E1 = digamma(at[k]) - digamma(np.sum(at))
 
             # Compute exponentiated expected log precision
-            E2 = (D*np.log(2) + self.log_det(Wt[:, :, k]) +
-                  self.multivariate_digamma(nt[k], D))
+            E2 = (D*np.log(2) + self.log_det(Wt[:, :, k]) + self.multivariate_digamma(nt[k], D))
 
             # Compute expected hypermean and hyperprecision
-            E3 = D/bt[k] + self.distW(X[~O, :] - mt[k, :], nt[k]*Wt[:, :, k])
+            E3 = D/bt[k] + self.distW(X - mt[k, :], nt[k]*Wt[:, :, k])
 
             # Update variational parameter at current pixels
-            log_rho[:, k] = E1 + E2/2 - E3/2
+            lrho[:, :, k] = E1 + E2/2 - E3/2
 
         # Subtract largest number from log_rho
-        log_rho = log_rho - np.max(log_rho, axis=1)[:, np.newaxis]
+        lrho[M, :] = lrho[M, :] - np.max(lrho[M, :], axis=1)[:, np.newaxis]
 
         # Exponentiate and normalize
-        rho[~O, :] = np.exp(log_rho) / np.sum(np.exp(log_rho), axis=1)[:, np.newaxis]
+        rho[M, :] = np.exp(lrho[M, :]) / np.sum(np.exp(lrho[M, :]), axis=1)[:, np.newaxis]
 
         # Check for underflow problems
-        if np.any(np.sum(rho, axis=1) == 0.0):
+        if np.any(np.abs(np.sum(rho, axis=2) - 1.0) > 1e-12):
             raise RuntimeError('Variational parameter underflow.')
 
-        # # Plot posteriors of each tissue
-        # plot_posteriors(rho.reshape((H, W, self.K)), savefn=savefn)
-
-        return rho.reshape((H, W, self.K))
+        return rho#.reshape((H, W, self.K))
 
     def maximization_step(self, X, rho, thetat):
         """
@@ -1368,7 +1386,7 @@ class SemisupervisedGaussianMixture(VariationalMixture):
                 F_ = F
 
             # Expectation step
-            rho = self.expectation_step(X, Y, rho, thetat, savefn=('rho_t' + str(t)))
+            rho = self.expectation_step(X, Y, rho, thetat)
 
             # Expectation step
             thetat = self.maximization_step(X, rho, thetat)
