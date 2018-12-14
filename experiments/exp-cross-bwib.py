@@ -153,8 +153,16 @@ for r in range(nR):
         fnM = trn_dir + '/IBSR_' + str(n + 1).zfill(2) + '_ana_brainmask.nii'
 
         # Load scan
-        X = subject2image(fnX, slice_dim=1, slice_ix=128, flipud=True, normalize=True)
-        Y = subject2image(fnY, slice_dim=2, slice_ix=128, flipud=True, CMA=True)
+        scan = subject2image(fnX,
+                             slice_dim=1,
+                             slice_ix=128,
+                             flipud=True,
+                             normalize=True)
+        segm = subject2image(fnY,
+                             slice_dim=2,
+                             slice_ix=128,
+                             flipud=True,
+                             CMA=True)
 
         # Find brain mask
         M = (Y != 0)
@@ -241,7 +249,7 @@ for r in range(nR):
             fn_segs = fn + 'SCK_segs' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
-            fn_segs = fn + 'SCK_seg-lines_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            fn_segs = fn + 'SCK_segl' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_clustering(X[30:-30, 30:-30, 0],
                             Y_h[30:-30, 30:-30],
                             mode='subpixel',
@@ -271,7 +279,7 @@ for r in range(nR):
             fn_segs = fn + 'UGM_segs' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
-            fn_segs = fn + 'UGM_seg-lines_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            fn_segs = fn + 'UGM_segl' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_clustering(X[30:-30, 30:-30, 0],
                             Y_h[30:-30, 30:-30],
                             mode='subpixel',
@@ -324,7 +332,7 @@ for r in range(nR):
             fn_segs = fn + 'UHP_segs' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
-            fn_segs = fn + 'UHP_seg-lines_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            fn_segs = fn + 'UHP_segl' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_clustering(X[30:-30, 30:-30, 0],
                             Y_h[30:-30, 30:-30],
                             mode='subpixel',

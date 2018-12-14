@@ -30,16 +30,16 @@ from vis import plot_segmentation, plot_clustering, plot_scan
 fn = 'exp-cross-bwmb-'
 
 # Number to save results to
-savenumber = '04'
+savenumber = '05'
 
 # Number of repetitions
-nR = 10
+nR = 50
 
 # Visualize predictions
 vis = False
 
 # Number of source patients
-nP_S = 5
+nP_S = 20
 
 # Number of target patients
 nP_T = 5
@@ -55,7 +55,7 @@ H = 256
 W = 256
 
 # Maximum number of iterations
-max_iter = 30
+max_iter = 10
 x_tol = 1e-3
 
 # Preallocate result array
@@ -194,27 +194,6 @@ for r in range(nR):
             fn_segs = fn + 'TRUE_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y[30:-30, 30:-30], savefn=fn_segs)
 
-        ''' Source neural network '''
-
-        X_ = np.zeros((1, H, W, 3))
-        for c in range(3):
-            X_[0, :, :, c] = X[:, :, 0]
-
-        # Compute posteriors
-        post = Unet.predict(X_)
-
-        # Make predictions
-        Y_h = np.argmax(post[0, :, :, :], axis=2)
-
-        # Compute error
-        err[6, n, r] = np.mean(Y_h[M] != Y[M])
-        dcc[6, n, r] = dice(Y_h[M], Y[M])
-
-        if vis:
-
-            fn_segs = fn + 'sUN_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
-
         '''Scikit's VB GMM'''
 
         # Initialize model
@@ -243,7 +222,7 @@ for r in range(nR):
             fn_segs = fn + 'SCK_segs' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
-            fn_segs = fn + 'SCK_seg-lines_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            fn_segs = fn + 'SCK_segl' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_clustering(X[30:-30, 30:-30, 0],
                             Y_h[30:-30, 30:-30],
                             mode='subpixel',
@@ -273,7 +252,7 @@ for r in range(nR):
             fn_segs = fn + 'UGM_segs' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
-            fn_segs = fn + 'UGM_seg-lines_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            fn_segs = fn + 'UGM_segl' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_clustering(X[30:-30, 30:-30, 0],
                             Y_h[30:-30, 30:-30],
                             mode='subpixel',
@@ -326,7 +305,7 @@ for r in range(nR):
             fn_segs = fn + 'UHP_segs' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
-            fn_segs = fn + 'UHP_seg-lines_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            fn_segs = fn + 'UHP_segl' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_clustering(X[30:-30, 30:-30, 0],
                             Y_h[30:-30, 30:-30],
                             mode='subpixel',
@@ -377,6 +356,27 @@ for r in range(nR):
         if vis:
 
             fn_segs = fn + 'KNN_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+            plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
+
+        ''' Source neural network '''
+
+        X_ = np.zeros((1, H, W, 3))
+        for c in range(3):
+            X_[0, :, :, c] = X[:, :, 0]
+
+        # Compute posteriors
+        post = Unet.predict(X_)
+
+        # Make predictions
+        Y_h = np.argmax(post[0, :, :, :], axis=2)
+
+        # Compute error
+        err[6, n, r] = np.mean(Y_h[M] != Y[M])
+        dcc[6, n, r] = dice(Y_h[M], Y[M])
+
+        if vis:
+
+            fn_segs = fn + 'sUN_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
             plot_segmentation(Y_h[30:-30, 30:-30], savefn=fn_segs)
 
 # Save error results

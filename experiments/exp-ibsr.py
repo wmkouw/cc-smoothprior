@@ -27,10 +27,10 @@ from vis import plot_segmentation, plot_clustering, plot_scan
 fn = 'exp-ibsr-'
 
 # Number to save results to
-savenumber = '01'
+savenumber = '02'
 
 # Number of repetitions
-nR = 5
+nR = 20
 
 # Visualize predictions
 vis = False
@@ -49,7 +49,7 @@ H = 256
 W = 256
 
 # Maximum number of iterations
-max_iter = 30
+max_iter = 10
 x_tol = 1e-3
 
 # Preallocate result array
@@ -57,7 +57,7 @@ err = np.ones((6, nP, nR))
 dcc = np.ones((6, nP, nR))
 
 # Set smoothing parameter
-beta = np.array([1.0, 1.0, 1.0, 1.0])
+beta = np.array([0.1, 0.1, 0.1, 0.1])
 
 '''Repeat experiment'''
 
@@ -79,11 +79,18 @@ for r in range(nR):
         trn_dir = '../data/IBSR/IBSR_' + str(n + 1).zfill(2)
         fnX = trn_dir + '/IBSR_' + str(n + 1).zfill(2) + '_ana.nii'
         fnY = trn_dir + '/IBSR_' + str(n + 1).zfill(2) + '_seg_ana.nii'
-        fnM = trn_dir + '/IBSR_' + str(n + 1).zfill(2) + '_ana_brainmask.nii'
 
         # Load scan
-        X = subject2image(fnX, slice_dim=1, slice_ix=128, flipud=True, normalize=True)
-        Y = subject2image(fnY, slice_dim=2, slice_ix=128, flipud=True, seg=True)
+        scan = subject2image(fnX,
+                             slice_dim=1,
+                             slice_ix=128,
+                             flipud=True,
+                             normalize=True)
+        segm = subject2image(fnY,
+                             slice_dim=2,
+                             slice_ix=128,
+                             flipud=True,
+                             CMA=True)
 
         # Find brain mask
         M = (Y != 0)

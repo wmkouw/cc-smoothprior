@@ -1240,13 +1240,8 @@ class SemisupervisedGaussianMixture(VariationalMixture):
         # Shape of variational parameter array
         H, W, D = X.shape
 
-        # # Reshape arrays
-        # X = X.reshape((H*W, D))
-        # Y = Y.reshape((H*W, self.K))
-        # rho = rho.reshape((H*W, self.K))
-
         # Observation indicator vector
-        M = np.all(Y == False, axis=2)
+        M = np.all(~Y, axis=2)
 
         # Unpack tuple of hyperparameters
         at, bt, nt, mt, Wt = thetat
@@ -1260,7 +1255,8 @@ class SemisupervisedGaussianMixture(VariationalMixture):
             E1 = digamma(at[k]) - digamma(np.sum(at))
 
             # Compute exponentiated expected log precision
-            E2 = (D*np.log(2) + self.log_det(Wt[:, :, k]) + self.multivariate_digamma(nt[k], D))
+            E2 = (D*np.log(2) + self.log_det(Wt[:, :, k]) +
+                  self.multivariate_digamma(nt[k], D))
 
             # Compute expected hypermean and hyperprecision
             E3 = D/bt[k] + self.distW(X - mt[k, :], nt[k]*Wt[:, :, k])
@@ -1272,13 +1268,14 @@ class SemisupervisedGaussianMixture(VariationalMixture):
         lrho[M, :] = lrho[M, :] - np.max(lrho[M, :], axis=1)[:, np.newaxis]
 
         # Exponentiate and normalize
-        rho[M, :] = np.exp(lrho[M, :]) / np.sum(np.exp(lrho[M, :]), axis=1)[:, np.newaxis]
+        rho[M, :] = (np.exp(lrho[M, :]) /
+                     np.sum(np.exp(lrho[M, :]), axis=1)[:, np.newaxis])
 
         # Check for underflow problems
         if np.any(np.abs(np.sum(rho, axis=2) - 1.0) > 1e-12):
             raise RuntimeError('Variational parameter underflow.')
 
-        return rho#.reshape((H, W, self.K))
+        return rho
 
     def maximization_step(self, X, rho, thetat):
         """

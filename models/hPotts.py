@@ -23,7 +23,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.feature_extraction.image import extract_patches_2d
 
 import matplotlib.pyplot as plt
-from vis import plot_posteriors
 
 
 class VariationalMixture(object):
@@ -471,8 +470,8 @@ class VariationalGaussianMixture(VariationalMixture):
 
             # Set responsibilities based on kNN prediction
             rho = np.zeros((H*W, self.K))
-            rho[~O, :] = kNN.predict_proba(X[~O,:])
-            rho[O, :] = Y[O,:].astype('float64')
+            rho[~O, :] = kNN.predict_proba(X[~O, :])
+            rho[O, :] = Y[O, :].astype('float64')
 
             # Concentration hyperparameters
             at = np.sum(rho, axis=0)
@@ -487,22 +486,10 @@ class VariationalGaussianMixture(VariationalMixture):
             Wt = np.zeros((D, D, self.K))
             for k in range(self.K):
 
-                # Hypermean
-                # mt[k, :] = np.sum(rho[:, [k]] * X, axis=0) / np.sum(rho[:, k])
+                # Hypermeans
                 mt[k, :] = X[Y[:, k] == 1, :]
 
-                # Weighted covariance
-                C = (rho[:, [k]] * (X - mt[k, :])).T @ (X - mt[k, :])
-
-                # Check for zero precision
-                C = np.maximum(1e-24, C)
-
-                # # Set hyperprecisions
-                # if D == 1:
-                #     Wt[:, :, k] = 1 / (nt[k] * C)
-                # else:
-                #     Wt[:, :, k] = inv(nt[k] * C)
-
+                # Hyperprecisions
                 Wt[:, :, k] = np.eye(D)
 
             # Reshape responsibilities
@@ -1096,8 +1083,8 @@ class VariationalHiddenPotts(VariationalMixture):
 
             # Set responsibilities based on kNN prediction
             rho = np.zeros((H*W, self.K))
-            rho[~O,:] = kNN.predict_proba(X[~O,:])
-            rho[O, :] = Y[O,:].astype('float64')
+            rho[~O, :] = kNN.predict_proba(X[~O, :])
+            rho[O, :] = Y[O, :].astype('float64')
 
             # Concentration hyperparameters
             at = np.sum(rho, axis=0)
@@ -1178,9 +1165,9 @@ class VariationalHiddenPotts(VariationalMixture):
         r"""
         Mean-field variational approximation to Potts log-likelihood function.
 
-        logp(z_i | z_{d_i}, beta) = 2*beta*\sum_{k=1}^{K} z_{ik}
+        logp(z_i | z_{d_i}, beta) = \sum_{k=1}^{K} beta_k * z_{ik}
             \sum_{j \in \delta_{ik}} z_{jk} - \log \sum_{z_{i'}}
-            \exp(2*beta*\sum_{k=1}^{K} z_{i'k} \sum_{j \in \delta_{ik}} z_{jk})
+            \exp(\sum_{k=1}^{K} beta_k*z_{i'k} \sum_{j \in \delta_{ik}} z_{jk})
 
         Parameters
         ----------
@@ -1210,65 +1197,53 @@ class VariationalHiddenPotts(VariationalMixture):
 
         if self.Bk:
 
-            # Initialize negative log-likelihood
-            nll = 0
+            # Initialize intermediate terms
+            chi_i = 0
+            ksi_i = 0
 
-            # Loop over pixels
-            for h in range(H):
-                for w in range(W):
+            # Select current class
+            for k in range(K):
 
-                    # Initialize intermediate terms
-                    chi_i = 0
-                    ksi_i = 0
+                # Extract neighbourhoods
+                d_ik = extract_patches_2d(Z0[:, :, k], patch_size=(3, 3))
 
-                    # Select current class
-                    for k in range(K):
+                # Compute sum over neighbourhood
+                d_ik = np.sum(d_ik, axis=(1, 2))
 
-                        # Extract neighbourhood of current class
-                        d_ik = self.neighbourhood(Z0[:, :, k],
-                                                  index=[h + 1, w + 1],
-                                                  pad=False)
+                # First sum is neighbourhood comparison
+                chi_i += beta[k] * Z[:, :, k].reshape((-1,)) * d_ik
 
-                        # First sum is neighbourhood comparison
-                        chi_i += beta[k]*Z[h, w, k]*np.sum(d_ik)
+                # Second sum is purely over neighbourhood
+                ksi_i += np.exp(beta[k] * d_ik)
 
-                        # Second sum is purely over neighbourhood
-                        ksi_i += np.exp(beta[k]*np.sum(d_ik))
-
-                    # Update negative log-likelihood
-                    nll += -chi_i + np.log(ksi_i)
+            # Update negative log-likelihood
+            nll = np.sum(-chi_i + np.log(ksi_i), axis=0)
 
             return nll
 
         else:
 
-            # Initialize negative log-likelihood
-            nll = 0
+            # Initialize intermediate terms
+            chi_i = 0
+            ksi_i = 0
 
-            # Loop over pixels
-            for h in range(H):
-                for w in range(W):
+            # Select current class
+            for k in range(K):
 
-                    # Initialize intermediate terms
-                    chi_i = 0
-                    ksi_i = 0
+                # Extract neighbourhoods
+                d_ik = extract_patches_2d(Z0[:, :, k], patch_size=(3, 3))
 
-                    # Select current class
-                    for k in range(K):
+                # Compute sum over neighbourhood
+                d_ik = np.sum(d_ik, axis=(1, 2))
 
-                        # Extract neighbourhood of current class
-                        d_ik = self.neighbourhood(Z0[:, :, k],
-                                                  index=[h + 1, w + 1],
-                                                  pad=False)
+                # First sum is neighbourhood comparison
+                chi_i += beta * Z[:, :, k].reshape((-1,)) * d_ik
 
-                        # First sum is neighbourhood comparison
-                        chi_i += Z[h, w, k]*np.sum(d_ik)
+                # Second sum is purely over neighbourhood
+                ksi_i += np.exp(beta * d_ik)
 
-                        # Second sum is purely over neighbourhood
-                        ksi_i += np.exp(2*beta*np.sum(d_ik))
-
-                    # Update negative log-likelihood
-                    nll += -2*beta*chi_i + np.log(ksi_i)
+            # Update negative log-likelihood
+            nll = np.sum(-chi_i + np.log(ksi_i), axis=0)
 
             return nll
 
@@ -1278,8 +1253,8 @@ class VariationalHiddenPotts(VariationalMixture):
 
         Derivative has the following form:
 
-        d/db log q(z|b) = \sum_{i=1}^{n} 2 \sum_{l=1}^{K} z_{il}
-            \sum_{j \in delta_i}
+        d/db log q(z|b) = \sum_{k=1}^{K} z_{ik} \sum_{j \in \delta_{ik}} z_{jk}
+            - \log \sum_{k} \exp(beta_k * \sum_{j \in \delta_{ik}} z_{jk})
 
         Parameters
         ----------
@@ -1287,7 +1262,6 @@ class VariationalHiddenPotts(VariationalMixture):
             Smoothing parameters / granularity coefficients.
         Z : array (height by width by number of classes)
             Label field to fit.
-
 
         Returns
         -------
@@ -1310,79 +1284,75 @@ class VariationalHiddenPotts(VariationalMixture):
 
         if self.Bk:
 
-            # Initialize gradient
+            # Extract neighbourhood
+            d_ik = np.zeros((H*W, self.K))
+
+            # Preallocate
             dqdb = np.zeros((self.K, ))
+            ksi_i = 0
 
-            # Loop over pixels
-            for h in range(H):
-                for w in range(W):
+            # Compute denominator first
+            for k in range(K):
 
-                    # Compute denominator first
-                    ksi_i = 0
-                    for k in range(K):
+                # Extract neighbourhoods
+                neighbourhoods = extract_patches_2d(Z0[:, :, k],
+                                                    patch_size=(3, 3))
 
-                        # Extract neighbourhood of current pixel
-                        d_ik = self.neighbourhood(Z0[:, :, k],
-                                                  index=[h + 1, w + 1],
-                                                  pad=False)
+                # Compute sum over neighbourhood
+                d_ik[:, k] = np.sum(neighbourhoods, axis=(1, 2))
 
-                        # Denominator term
-                        ksi_i += np.exp(beta[k]*np.sum(d_ik))
+                # Denominator term
+                ksi_i += np.exp(beta[k]*d_ik[:, k])
 
-                    # Loop over classes
-                    for k in range(K):
+            # Loop over classes
+            for k in range(K):
 
-                        # Extract neighbourhood of current pixel
-                        d_ik = self.neighbourhood(Z0[:, :, k],
-                                                  index=[h + 1, w + 1],
-                                                  pad=False)
+                # First term
+                chi_i = Z[:, :, k].reshape((-1, )) * d_ik[:, k]
 
-                        # First term
-                        chi_i = Z[h, w, k]*np.sum(d_ik)
+                # Numerator
+                psi_i = np.exp(beta[k]*d_ik[:, k]) * d_ik[:, k]
 
-                        # Numerator
-                        psi_i = np.exp(beta[k]*np.sum(d_ik))*(np.sum(d_ik))
+                # Update partial derivative
+                dqdb[k] += np.sum(-chi_i + psi_i / ksi_i, axis=0)
 
-                        # Update partial derivative
-                        dqdb[k] += -chi_i + psi_i / ksi_i
-
-            return np.array(dqdb)
+            return dqdb
 
         else:
 
-            # Initialize log-likelihood
-            dqdb = 0
+            # Extract neighbourhood
+            d_ik = np.zeros((H*W, self.K))
 
-            # Loop over pixels
-            for h in range(H):
-                for w in range(W):
+            # Preallocate
+            dqdb = np.zeros((self.K, ))
+            ksi_i = 0
 
-                    # Initialize intermediate terms
-                    chi_i = 0
-                    ksi_i = 0
-                    psi_i = np.zeros((K,))
+            # Compute denominator first
+            for k in range(K):
 
-                    # Select current class
-                    for k in range(K):
+                # Extract neighbourhoods
+                neighbourhoods = extract_patches_2d(Z0[:, :, k],
+                                                    patch_size=(3, 3))
 
-                        # Extract neighbourhood of current pixel
-                        d_ik = self.neighbourhood(Z0[:, :, k],
-                                                  index=[h + 1, w + 1],
-                                                  pad=False)
+                # Compute sum over neighbourhood
+                d_ik[:, k] = np.sum(neighbourhoods, axis=(1, 2))
 
-                        # First term
-                        chi_i += Z[h, w, k]*np.sum(d_ik)
+                # Denominator term
+                ksi_i += np.exp(beta * d_ik[:, k])
 
-                        # Denominator
-                        ksi_i += np.exp(2*beta*np.sum(d_ik))
+            # Loop over classes
+            for k in range(K):
 
-                        # Numerator
-                        psi_i[k] = np.exp(2*beta*np.sum(d_ik))*(2*np.sum(d_ik))
+                # First term
+                chi_i = Z[:, :, k].reshape((-1, )) * d_ik[:, k]
 
-                    # Update partial derivative
-                    dqdb += -2*chi_i + np.sum(psi_i / ksi_i)
+                # Numerator
+                psi_i = np.exp(beta * d_ik[:, k]) * d_ik[:, k]
 
-            return np.array(dqdb)
+                # Update partial derivative
+                dqdb[k] += np.sum(-chi_i + psi_i / ksi_i, axis=0)
+
+            return dqdb
 
     def maximum_likelihood_beta(self, Z,
                                 ub=None,
@@ -1588,7 +1558,7 @@ class VariationalHiddenPotts(VariationalMixture):
         H, W, D = X.shape
 
         # Observation indicator vector
-        M = np.all(Y == False, axis=2)
+        M = np.all(~Y, axis=2)
 
         # Pad variational parameter array, to avoid repeated padding
         rho0 = np.pad(rho, [(1, 1), (1, 1), (0, 0)],
@@ -1606,38 +1576,32 @@ class VariationalHiddenPotts(VariationalMixture):
             E1 = digamma(at[k]) - digamma(np.sum(at))
 
             # Compute exponentiated expected log precision
-            E2 = (D*np.log(2) + slogdet(Wt[:, :, k])[1] +
-                  self.multidigamma(nt[k], D))/2
+            E2 = (slogdet(Wt[:, :, k])[1] + self.multidigamma(nt[k], D))/2
 
             # Compute expected hypermean and hyperprecision
-            E3 = D/bt[k] + self.distW(X - mt[k, :], nt[k]*Wt[:, :, k])
+            E3 = -(D/bt[k] + self.distW(X - mt[k, :], nt[k]*Wt[:, :, k]))/2
 
-            # Check each pixel
-            E4 = np.zeros((H, W))
-            for h in range(H):
-                for w in range(W):
+            # Extract neighbourhoods
+            d_ik = extract_patches_2d(rho0[:, :, k], patch_size=(3, 3))
 
-                    # Check neighbourhood of current pixel
-                    d_ik = self.neighbourhood(rho0[:, :, k], index=(h+1, w+1))
+            # Compute sum over neighbourhood
+            d_ik = np.sum(d_ik, axis=(1, 2)).reshape((H, W))
 
-                    # Check for tissue-specific
-                    if self.Bk:
-
-                        # Tissue-specific smoothness term
-                        E4[h, w] = beta[k]*np.sum(d_ik)
-
-                    else:
-                        # Global smoothness term
-                        E4[h, w] = beta*np.sum(d_ik)
+            # Compute Potts regularizer
+            if self.Bk:
+                E4 = beta[k] * d_ik
+            else:
+                E4 = beta * d_ik
 
             # Update variational parameter at current pixels
-            lrho[:, :, k] = E1 + E2 - E3/2 + E4
+            lrho[:, :, k] = E1 + E2 + E3 + E4
 
         # Subtract largest number from log_rho
         lrho[M, :] = lrho[M, :] - np.max(lrho[M, :], axis=1)[:, np.newaxis]
 
         # Exponentiate and normalize
-        rho[M, :] = np.exp(lrho[M, :]) / np.sum(np.exp(lrho[M, :]), axis=1)[:, np.newaxis]
+        rho[M, :] = (np.exp(lrho[M, :]) /
+                     np.sum(np.exp(lrho[M, :]), axis=1)[:, np.newaxis])
 
         # Check for underflow problems
         if np.any(np.abs(np.sum(rho, axis=2) - 1.0) > 1e-12):

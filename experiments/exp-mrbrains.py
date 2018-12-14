@@ -27,10 +27,10 @@ from vis import plot_segmentation, plot_clustering, plot_scan
 fn = 'exp-mrbrains-'
 
 # Number to save results to
-savenumber = '05'
+savenumber = '06'
 
 # Number of repetitions
-nR = 10
+nR = 50
 
 # Visualize predictions
 vis = False
@@ -49,7 +49,7 @@ H = 256
 W = 256
 
 # Maximum number of iterations
-max_iter = 30
+max_iter = 10
 x_tol = 1e-3
 
 # Preallocate result array
@@ -57,7 +57,7 @@ err = np.ones((6, nP, nR))
 dcc = np.ones((6, nP, nR))
 
 # Set smoothing parameter
-beta = np.array([1.0, 1.0, 1.0, 1.0])
+beta = np.array([0.1, 0.1, 0.1, 0.1])
 
 '''Repeat experiment'''
 

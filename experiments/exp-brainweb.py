@@ -32,10 +32,10 @@ fn = 'exp-brainweb-'
 savenumber = '03'
 
 # Number of repetitions
-nR = 1
+nR = 10
 
 # Visualize predictions
-vis = True
+vis = False
 
 # Number of patients
 nP = 20
@@ -51,7 +51,7 @@ H = 256
 W = 256
 
 # Maximum number of iterations
-max_iter = 30
+max_iter = 10
 x_tol = 1e-3
 
 # Preallocate result array
@@ -143,31 +143,31 @@ for r in range(nR):
 
         '''Scikit's VB GMM'''
 
-        # Initialize model
-        model = BayesianGaussianMixture(n_components=K,
-                                        max_iter=max_iter,
-                                        verbose=3)
+        # # Initialize model
+        # model = BayesianGaussianMixture(n_components=K,
+        #                                 max_iter=max_iter,
+        #                                 verbose=3)
 
-        # Fit model
-        model.fit(X.reshape((-1, 1)))
+        # # Fit model
+        # model.fit(X.reshape((-1, 1)))
 
-        # Segment image
-        Y_h = model.predict(X.reshape((-1, 1))).reshape((H, W))
+        # # Segment image
+        # Y_h = model.predict(X.reshape((-1, 1))).reshape((H, W))
 
-        # Obtain posteriors
-        post = model.predict_proba(X.reshape((-1, 1))).reshape((H, W, K))
+        # # Obtain posteriors
+        # post = model.predict_proba(X.reshape((-1, 1))).reshape((H, W, K))
 
-        # Set cluster assignments to correct tissue labels
-        Y_h = set_classes(Y_h, z)
+        # # Set cluster assignments to correct tissue labels
+        # Y_h = set_classes(Y_h, z)
 
-        # Compute error
-        err[0, n, r] = np.mean(Y_h[M] != Y[M])
-        dcc[0, n, r] = dice(Y_h[M], Y[M])
+        # # Compute error
+        # err[0, n, r] = np.mean(Y_h[M] != Y[M])
+        # dcc[0, n, r] = dice(Y_h[M], Y[M])
 
-        if vis:
+        # if vis:
 
-            fn_segs = fn + 'SCK_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
-            plot_clustering(X[:, :, 0], Y_h, mode='subpixel', savefn=fn_segs)
+        #     fn_segs = fn + 'SCK_segs_p' + str(n+1) + '_r' + str(r+1) + '.png'
+        #     plot_clustering(X[:, :, 0], Y_h, mode='subpixel', savefn=fn_segs)
 
         ''' Unsupervised Gaussian Mixture '''
 
