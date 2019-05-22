@@ -1,4 +1,4 @@
-# Cross-center smoothness prior for hidden Potts models
+# Cross-center smoothness prior
 
 This repository contains algorithms and experiments for the paper
 
