@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Experiment script to test training on Brainweb1.5T and testing on IBSR20.
+Experiment script to train on Brainweb1.5T and testing on IBSR20.
 
 Author: W.M.Kouw
 Date: 13-12-2018
@@ -157,7 +157,7 @@ for r in range(nR):
                              slice_dim=1,
                              slice_ix=128,
                              flipud=True,
-                             normalize=True)
+                             normalize=255)
         segm = subject2image(fnY,
                              slice_dim=2,
                              slice_ix=128,

@@ -83,7 +83,7 @@ for n in np.arange(nP_S):
                          slice_dim=1,
                          slice_ix=128,
                          flipud=True,
-                         normalize=True)
+                         normalize=255)
     segm = subject2image(fnY,
                          slice_dim=2,
                          slice_ix=128,
@@ -146,7 +146,7 @@ for r in range(nR):
         fnY = trn_dir + str(n+1) + '/LabelsForTesting.nii'
 
         # Load scan
-        X = subject2image(fnX, slice_ix=69, slice_dim=2, normalize=True)
+        X = subject2image(fnX, slice_ix=69, slice_dim=2, normalize=1023)
         Y = subject2image(fnY, slice_ix=69, slice_dim=2)
 
         # Expand to channels

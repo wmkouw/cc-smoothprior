@@ -152,7 +152,7 @@ for r in range(nR):
         fnY = trn_dir + str(n+1) + '/LabelsForTesting.nii'
 
         # Load scan
-        X = subject2image(fnX, normalize=True)
+        X = subject2image(fnX, normalize=1023)
         Y = subject2image(fnY, seg=True)
 
         # Expand to channels

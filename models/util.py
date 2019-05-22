@@ -174,7 +174,7 @@ def subject2image(fn, imsize=(256, 256),
         if normalize:
             im[im < 0] = 0
             # im[im>hd.sizeof_hdr] = hd.sizeof_hdr
-            im = im / float(1023)
+            im = im / normalize
 
         if CMA:
             # Restrict classes of segmentations

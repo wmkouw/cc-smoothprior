@@ -1,14 +1,13 @@
-# Cross-center informative priors
+# Cross-center smoothness prior for hidden Potts models
 
-In this project, I aim to learn a cross-center informative prior for a Bayesian image
-segmentation model with a Potts-Markov Random Field as a prior for the labels.
+This repository contains algorithms and experiments for the paper
 
-By doing a variational approximation of the Potts prior, we can obtain a form that allows for maximum likelihood estimation of the smoothness parameter \beta. Using an additional data set consisting purely of labeled images, one could obtain an estimate of \beta. Essentially, you are setting the Potts-prior to mimic the smoothness of segmentation in another data set.
+["A cross-center smoothness prior for variational Bayesian brain tissue segmentation."](https://arxiv.org/abs/1903.04191)
 
-Using a similar variational approximation, one could obtain posterior parameter estimates for the whole Bayesian model. Inference consists of doing Expectation-Maximization (EM) on the parameters of the variational distribution.
+Generalizing machine learning algorithms across medical centers is difficult. Data is often strongly biased towards each center, leading to different mappings from medical image X to segmented image Y.
 
-Further work is in progress.
+Instead of designing an adaptive classification model that would attempt to adjust its mapping X &#8594; Y for each center, I inform an unsupervised Bayesian segmentation model with how Y is supposed to look like. Specifically, I fit a smoothness prior on segmentations produced in one medical center and incorporate that as an informative empirical prior in a variational Bayesian image segmentation model. This model will produce segmentations in a target medical center that are as smooth as the segmentations produced in the source medical center.
 
 ## Contact
 
-Comments, questions and feedback can be submitted to the [issues tracker](https://github.com/wmkouw/infopriors-hPMRF/issues).
+Comments, questions and feedback can be submitted to the [issues tracker](https://github.com/wmkouw/cc-smoothprior/issues).

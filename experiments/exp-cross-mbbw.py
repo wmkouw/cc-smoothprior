@@ -79,7 +79,7 @@ for n in np.arange(nP_S):
     fnY = pdir_mb + str(n+1) + '/LabelsForTesting.nii'
 
     # Load scan
-    scan = subject2image(fnX, normalize=True)
+    scan = subject2image(fnX, normalize=1023)
     segm = subject2image(fnY, seg=True)
 
     # One-hot label image encoding
