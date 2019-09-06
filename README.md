@@ -2,7 +2,7 @@
 
 This repository contains algorithms and experiments for the paper
 
-["A cross-center smoothness prior for variational Bayesian brain tissue segmentation."](https://arxiv.org/abs/1903.04191)
+["A cross-center smoothness prior for variational Bayesian brain tissue segmentation."](https://link.springer.com/chapter/10.1007/978-3-030-20351-1_27)
 
 Generalizing machine learning algorithms across medical centers is difficult. Data is often strongly biased towards each center, leading to different mappings from medical image X to segmented image Y.
 
